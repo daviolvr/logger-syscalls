@@ -113,9 +113,6 @@ int main(int argc, char *argv[]) {
         long syscall = regs.orig_rax; 
         printf("Nome da chamada: %s - args: (arg1=%lld, arg2=%lld, arg3=%lld) ",
             syscall_name(syscall), regs.rdi, regs.rsi, regs.rdx);
-        
-        fprintf(csv, "Nome da chamada: %s - args: (arg1=%lld, arg2=%lld, arg3=%lld) ", // Escreve no csv
-            syscall_name(syscall), regs.rdi, regs.rsi, regs.rdx);
 
 
         ptrace(PTRACE_SYSCALL, pid, NULL, NULL); // Executa a syscall
@@ -126,7 +123,6 @@ int main(int argc, char *argv[]) {
         ptrace(PTRACE_GETREGS, pid, NULL, &regs);
 
         printf("- retorno: %lld ", regs.rax); // Lê o valor de retorno
-        fprintf(csv, "- retorno: %lld ", regs.rax);
         
         struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
@@ -136,7 +132,19 @@ int main(int argc, char *argv[]) {
         
         // Registra timestamp e PID
         printf("- TimeStamp: [%s] - PID %d\n", timestamp_formatado, pid); 
-        fprintf(csv, "- TimeStamp: [%s] - PID %d\n", timestamp_formatado, pid);
+
+        // Escreve no csv
+        fprintf(csv, "%s,%lld,%lld,%lld,%lld,%s,%d\n",
+            syscall_name(syscall),
+            regs.rdi,
+            regs.rsi,
+            regs.rdx,
+            regs.rax,
+            timestamp_formatado,
+            pid
+        );
+        fflush(csv); // Garantir escrita de cada linha em tempo real
+
 
         ptrace(PTRACE_SYSCALL, pid, NULL, NULL); 
     }
