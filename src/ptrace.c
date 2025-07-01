@@ -93,7 +93,10 @@ int main(int argc, char *argv[]) {
     } else {
         printf("Arquivo criado: %s\n", nome_arquivo);
     }
-    
+
+    // Escreve cabeçalho do CSV
+    fprintf(csv, "Nome da chamada, arg1, arg2, arg3, retorno, timestamp, PID\n");
+    fflush(csv);
     
     printf("Atacando o processo: %s (PID: %d)\n", nome_processo, pid);
 
