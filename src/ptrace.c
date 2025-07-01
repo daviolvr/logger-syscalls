@@ -30,9 +30,18 @@ void get_process_name(int pid, char *buffer, size_t size) {
     }
 }
 
-// Captura timestamp com precisão de nanosegundos
-void get_timestamp(struct timespec* ts) {
-    clock_gettime(CLOCK_REALTIME, ts); 
+// Gera timestamp com formato legível
+void formatar_timestamp_legivel(struct timespec ts, char *buffer, size_t size) {
+    struct tm tempo_local;
+    localtime_r(&ts.tv_sec, &tempo_local); // Converte pra horário local
+
+    // Escreve a data e hora base (até os segundos)
+    strftime(buffer, size, "%Y-%m-%d %H:%M:%S", &tempo_local);
+
+    // Adiciona os nanosegundos
+    char nanos[16];
+    snprintf(nanos, sizeof(nanos), ".%09ld", ts.tv_nsec);
+    strncat(buffer, nanos, size - strlen(buffer) - 1);
 }
 
 // Verifica se o arquivo existe usando stat()
@@ -120,11 +129,14 @@ int main(int argc, char *argv[]) {
         fprintf(csv, "- retorno: %lld ", regs.rax);
         
         struct timespec ts;
-        get_timestamp(&ts);  
+        clock_gettime(CLOCK_REALTIME, &ts);
+        
+        char timestamp_formatado[64];
+        formatar_timestamp_legivel(ts, timestamp_formatado, sizeof(timestamp_formatado));
         
         // Registra timestamp e PID
-        printf("- TimeStamp: [%ld.%09ld] - PID %d\n", ts.tv_sec, ts.tv_nsec, pid); 
-        fprintf(csv, "- TimeStamp: [%ld.%09ld] - PID %d\n", ts.tv_sec, ts.tv_nsec, pid);
+        printf("- TimeStamp: [%s] - PID %d\n", timestamp_formatado, pid); 
+        fprintf(csv, "- TimeStamp: [%s] - PID %d\n", timestamp_formatado, pid);
 
         ptrace(PTRACE_SYSCALL, pid, NULL, NULL); 
     }
