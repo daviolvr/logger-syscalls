@@ -78,7 +78,7 @@ int main(int argc, char *argv[]) {
     get_process_name(pid, nome_processo, sizeof(nome_processo));
 
     // CSV para análise posterior
-    const char *nome_arquivo = "../outputs/syscalls.csv";
+    const char *nome_arquivo = "outputs/syscalls.csv";
     int precisa_cabecalho = !file_exist(nome_arquivo);
 
 
@@ -92,7 +92,7 @@ int main(int argc, char *argv[]) {
 
     // Escreve cabeçalho do CSV (apenas se ainda não tiver)
     if (precisa_cabecalho) {
-        fprintf(csv, "Nome da chamada,arg1,arg2,arg3,retorno,timestamp,PID\n");
+        fprintf(csv, "Nome da chamada,rdi,rsi,rdx,r10,r8,r9,retorno,timestamp,PID\n");
         fflush(csv);
     }
     
@@ -112,9 +112,6 @@ int main(int argc, char *argv[]) {
 
         // Extrai número da syscall e os argumentos (rdi, rsi, rdx)
         long syscall = regs.orig_rax; 
-        printf("Nome da chamada: %s - args: (arg1=%lld, arg2=%lld, arg3=%lld) ",
-            syscall_name(syscall), regs.rdi, regs.rsi, regs.rdx);
-
 
         ptrace(PTRACE_SYSCALL, pid, NULL, NULL); // Executa a syscall
 
@@ -122,8 +119,6 @@ int main(int argc, char *argv[]) {
         if (WIFEXITED(status)) break;
 
         ptrace(PTRACE_GETREGS, pid, NULL, &regs);
-
-        printf("- retorno: %lld ", regs.rax); // Lê o valor de retorno
         
         struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
@@ -131,15 +126,30 @@ int main(int argc, char *argv[]) {
         char timestamp_formatado[64];
         formatar_timestamp_legivel(ts, timestamp_formatado, sizeof(timestamp_formatado));
         
-        // Registra timestamp e PID
-        printf("- TimeStamp: [%s] - PID %d\n", timestamp_formatado, pid); 
-
-        // Escreve no csv
-        fprintf(csv, "%s,%lld,%lld,%lld,%lld,%s,%d\n",
+        // Exibir no terminal
+        printf("%s,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%s,%d\n",
             syscall_name(syscall),
             regs.rdi,
             regs.rsi,
             regs.rdx,
+            regs.r10,
+            regs.r8,
+            regs.r9,
+            regs.rax,
+            timestamp_formatado,
+            pid
+        );
+
+
+        // Escreve no csv
+        fprintf(csv, "%s,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%s,%d\n",
+            syscall_name(syscall),
+            regs.rdi,
+            regs.rsi,
+            regs.rdx,
+            regs.r10,
+            regs.r8,
+            regs.r9,
             regs.rax,
             timestamp_formatado,
             pid
