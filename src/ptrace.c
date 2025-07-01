@@ -75,18 +75,14 @@ int main(int argc, char *argv[]) {
     }
 
     char nome_processo[256];
-    get_process_name(pid, nome_processo, sizeof(nome_processo)); // Usa o nome  do processo como nome do CSV de saida
+    get_process_name(pid, nome_processo, sizeof(nome_processo));
 
-    char nome_arquivo[300];
-    snprintf(nome_arquivo, sizeof(nome_arquivo), "../outputs/%s.csv", nome_processo);
+    // CSV para análise posterior
+    const char *nome_arquivo = "../outputs/syscalls.csv";
+    int precisa_cabecalho = !file_exist(nome_arquivo);
 
-    
-    if (file_exist(nome_arquivo)) {
-        time_t agora = time(NULL); 
-        snprintf(nome_arquivo, sizeof(nome_arquivo), "../outputs/%s_%ld.csv", nome_processo, agora);
-    }
 
-    FILE *csv = fopen(nome_arquivo, "w"); // ABre o CSV para escrita, e imprime erro em caso de falha
+    FILE *csv = fopen(nome_arquivo, "a"); // ABre o CSV para escrita, e imprime erro em caso de falha
     if (!csv) {
         perror("Erro ao abrir o arquivo CSV");
         return 1;
@@ -94,9 +90,11 @@ int main(int argc, char *argv[]) {
         printf("Arquivo criado: %s\n", nome_arquivo);
     }
 
-    // Escreve cabeçalho do CSV
-    fprintf(csv, "Nome da chamada, arg1, arg2, arg3, retorno, timestamp, PID\n");
-    fflush(csv);
+    // Escreve cabeçalho do CSV (apenas se ainda não tiver)
+    if (precisa_cabecalho) {
+        fprintf(csv, "Nome da chamada,arg1,arg2,arg3,retorno,timestamp,PID\n");
+        fflush(csv);
+    }
     
     printf("Atacando o processo: %s (PID: %d)\n", nome_processo, pid);
 
