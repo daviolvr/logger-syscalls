@@ -1,1 +1,6 @@
 .vscode/
+*.o
+*.exe
+build/
+*.csv
+tasks.txt
