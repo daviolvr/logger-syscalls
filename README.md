@@ -1,14 +1,35 @@
 # Logger para syscalls
 
-⚠️ ATENÇÃO: Crie um diretório build/ na raiz para compilar os programas. Também deve rodar o programa no diretório raiz.
+## 1. Rodando o make
+```sh
+make
+```
 
-## 1. Rodar htop ou btop
-Rode o comando htop ou btop e identifique o processo (pelo PID) que deseja atacar
+## 2. Rodando htop ou btop
+Caso não tenha:
+```sh
+sudo apt install btop
+sudo apt install htop
+```
 
-## 2. Compilar o programa
-gcc -o build/monitor src/monitor.c -lseccomp
+Então rode:
+```sh
+htop
+btop
+```
 
-## 3. Rodar o programa
-sudo ./build/monitor <PID>
+E selecione um PID para análise.
 
-OBS: o PID é o que você escolheu no passo 1.
+## 3. Compilar o programa
+Na raiz do projeto, rode:
+```sh
+make
+```
+
+## 4. Rodar o programa
+Ainda na raiz do projeto, rode:
+```sh
+sudo ./build/syscall_monitor <PID>
+```
+
+OBS: o PID é o que você escolheu no passo 2.
