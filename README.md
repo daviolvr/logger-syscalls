@@ -1,6 +1,7 @@
 # Logger para syscalls
 
 ## 1. Rodando o make
+Na raiz do projeto, rode:
 ```sh
 make
 ```
@@ -20,13 +21,7 @@ btop
 
 E selecione um PID para análise.
 
-## 3. Compilar o programa
-Na raiz do projeto, rode:
-```sh
-make
-```
-
-## 4. Rodar o programa
+## 3. Rodar o programa
 Ainda na raiz do projeto, rode:
 ```sh
 sudo ./build/syscall_monitor <PID>
