@@ -1,7 +1,30 @@
 # Logger para syscalls
-Para usar, primeiro rode um btop, ou htop e veja o PID que deseja atacar, após isso, caso ainda não tenha compilado o programa, 
-compile com: gcc -o ptrace ptrace.c -lseccomp 
-e para rodar use:
-sudo ./ptrace <pid>
 
-Salvar os executáveis na pasta build
+## 1. Rodando o make
+Na raiz do projeto, rode:
+```sh
+make
+```
+
+## 2. Rodando htop ou btop
+Caso não tenha:
+```sh
+sudo apt install btop
+sudo apt install htop
+```
+
+Então rode:
+```sh
+htop
+btop
+```
+
+E selecione um PID para análise.
+
+## 3. Rodar o programa
+Ainda na raiz do projeto, rode:
+```sh
+sudo ./build/syscall_monitor <PID>
+```
+
+OBS: o PID é o que você escolheu no passo 2.

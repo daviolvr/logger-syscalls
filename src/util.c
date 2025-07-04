@@ -1,0 +1,24 @@
+#define _POSIX_C_SOURCE 199309L
+
+#include <time.h>
+#include <string.h>
+#include <stdio.h>
+#include <sys/stat.h>
+#include "util.h"
+
+// Recebe um timespec e formata em string legível
+void formatar_timestamp_legivel(struct timespec ts, char *buffer, size_t size) {
+    struct tm tempo_local;
+    localtime_r(&ts.tv_sec, &tempo_local);
+    strftime(buffer, size, "%Y-%m-%d %H:%M:%S", &tempo_local);
+
+    char nanos[16];
+    snprintf(nanos, sizeof(nanos), ".%09ld", ts.tv_nsec);
+    strncat(buffer, nanos, size - strlen(buffer) - 1);
+}
+
+// Função pra chgecar se o arquivo passado existe, retornando 1 se sim, 0 se não
+int file_exist(const char *nome) {
+    struct stat buffer;
+    return (stat(nome, &buffer) == 0);
+}
