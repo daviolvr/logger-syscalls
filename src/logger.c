@@ -13,6 +13,7 @@
 #include "processo.h"
 #include "util.h"
 #include "syscall.h"
+#include "translator.h"  // <-- inclusão do tradutor
 #include <asm-generic/unistd.h>
 #include <asm/unistd_64.h>
 
@@ -27,7 +28,6 @@ void iniciar_monitoramento(int pid) {
 
     const char *nome_arquivo = "outputs/syscalls.csv";
     
-    // Abre o arquivo em modo "w" para recriá-lo do zero
     FILE *csv = fopen(nome_arquivo, "w");
     if (!csv) {
         perror("Erro ao abrir o arquivo CSV");
@@ -68,8 +68,7 @@ void iniciar_monitoramento(int pid) {
                 continue;
             }
 
-            // Buffer para formatar a mensagem uma só vez
-            char log_line[1024];
+            char log_line[2048];
             int len = 0;
 
             switch (syscall_num) {
@@ -105,10 +104,13 @@ void iniciar_monitoramento(int pid) {
                 }
 
                 case __NR_statx: {
+                    char flags_str[128], mask_str[128];
+                    traduzir_flags_statx(regs.rdx, flags_str, sizeof(flags_str));
+                    traduzir_mask_statx(regs.r10, mask_str, sizeof(mask_str));
                     len = snprintf(log_line, sizeof(log_line),
-                        "%s(dirfd=%lld, pathname=%p, flags=%llu, mask=%llu, statxbuf=%p) = %lld [%s] [PID: %d]\n",
-                        nome, (long long)regs.rdi, (void*)regs.rsi,
-                        regs.rdx, regs.r10, (void*)regs.r8,
+                        "%s(dirfd=%s, pathname=%p, flags=%s, mask=%s, statxbuf=%p) = %lld [%s] [PID: %d]\n",
+                        nome, traduzir_dirfd((long)regs.rdi), (void*)regs.rsi,
+                        flags_str, mask_str, (void*)regs.r8,
                         regs.rax, timestamp_formatado, pid);
                     break;
                 }
@@ -130,10 +132,12 @@ void iniciar_monitoramento(int pid) {
 
                 case __NR_openat: {
                     char *path = read_process_memory(pid, regs.rsi, 256);
+                    char flags_str[128];
+                    traduzir_flags_open(regs.rdx, flags_str, sizeof(flags_str));
                     len = snprintf(log_line, sizeof(log_line),
-                        "%s(dirfd=%lld, pathname=\"%s\", flags=%llu, mode=%llu) = %lld [%s] [PID: %d]\n",
-                        nome, (long long)regs.rdi, path ? path : "NULL",
-                        regs.rdx, regs.r10, regs.rax, timestamp_formatado, pid);
+                        "%s(dirfd=%s, pathname=\"%s\", flags=%s, mode=%llu) = %lld [%s] [PID: %d]\n",
+                        nome, traduzir_dirfd((long)regs.rdi), path ? path : "NULL",
+                        flags_str, regs.r10, regs.rax, timestamp_formatado, pid);
                     free(path);
                     break;
                 }
@@ -147,13 +151,11 @@ void iniciar_monitoramento(int pid) {
                 }
 
                 default:
-                    // Ignorar outras syscalls
                     in_syscall = 0;
                     ptrace(PTRACE_SYSCALL, pid, NULL, NULL);
                     continue;
             }
 
-            // Escreve no console e no CSV
             printf("%s", log_line);
             fprintf(csv, "%s", log_line);
             fflush(csv);
