@@ -55,27 +55,25 @@ regs: registradores contendo argumentos e retorno
 timestamp: string com timestamp formatado
 pid: PID do processo que fez a syscall
 */
-void print_syscall_info(long syscall_num, struct user_regs_struct regs,
+void print_syscall_info(long syscall_num, const struct user_regs_struct *regs,
                        const char* timestamp, int pid) {
-    // Imprime no terminal
     printf("%s,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%s,%d\n",
-           syscall_name(syscall_num),  // Nome da syscall
-           regs.rdi, regs.rsi, regs.rdx,  // Argumentos 1-3
-           regs.r10, regs.r8, regs.r9,    // Argumentos 4-6
-           (unsigned long long)regs.rax,  // Valor de retorno
-           timestamp,                     // Quando ocorreu
-           pid);                          // PID do processo
+           syscall_name(syscall_num),
+           regs->rdi, regs->rsi, regs->rdx,
+           regs->r10, regs->r8, regs->r9,
+           (unsigned long long)regs->rax,
+           timestamp,
+           pid);
 
-    // Grava no arquivo CSV (se aberto)
     if (csv_file) {
         fprintf(csv_file, "%s,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%s,%d\n",
                syscall_name(syscall_num),
-               regs.rdi, regs.rsi, regs.rdx,
-               regs.r10, regs.r8, regs.r9,
-               (unsigned long long)regs.rax,
+               regs->rdi, regs->rsi, regs->rdx,
+               regs->r10, regs->r8, regs->r9,
+               (unsigned long long)regs->rax,
                timestamp,
                pid);
-        fflush(csv_file); // Garante que os dados são escritos imediatamente
+        fflush(csv_file);
     }
 }
 
@@ -94,11 +92,10 @@ void add_pid(int pid) {
     
     // Adiciona o PID e incrementa o contador
     monitored_pids[num_monitored++] = pid;
-    printf("Monitorando PID: %d\n", pid); // Log informativo
+    printf("Monitorando PID: %d\n", pid);
 }
 
 /*
-Função: find_all_children
 Encontra todos os processos filhos e threads de um processo pai
 parent_pid: PID do processo pai
 */
@@ -192,24 +189,17 @@ void monitor_process(int pid) {
     if (!WIFSTOPPED(status)) {
         fprintf(stderr, "PID %d não parou corretamente\n", pid);
         ptrace(PTRACE_DETACH, pid, NULL, NULL);
+        printf("Processo %d desanexado\n", pid);
         return;
     }
 
-    /* Configura opções de ptrace:
-    - TRACESYSGOOD: melhora identificação de syscalls
-    - TRACEFORK/VFORK/CLONE: captura criação de novos processos
-    - TRACEEXEC: captura execução de novos programas
-    - TRACEEXIT: captura término do processo
-     */
-    if (ptrace(PTRACE_SETOPTIONS, pid, NULL, 
-              PTRACE_O_TRACESYSGOOD |
-              PTRACE_O_TRACEFORK |
-              PTRACE_O_TRACEVFORK |
-              PTRACE_O_TRACECLONE |
-              PTRACE_O_TRACEEXEC |
-              PTRACE_O_TRACEEXIT) == -1) {
+    // Configura opções de ptrace
+    int options = PTRACE_O_TRACESYSGOOD | PTRACE_O_TRACEEXEC | PTRACE_O_TRACEEXIT;
+    
+    if (ptrace(PTRACE_SETOPTIONS, pid, NULL, options) == -1) {
         perror("ptrace setoptions falhou");
         ptrace(PTRACE_DETACH, pid, NULL, NULL);
+        printf("Processo %d desanexado", pid);
         return;
     }
 
@@ -286,10 +276,10 @@ void monitor_process(int pid) {
             struct timespec ts;
             clock_gettime(CLOCK_REALTIME, &ts);
             char timestamp[64];
-            formatar_timestamp_legivel(ts, timestamp, sizeof(timestamp));
+            format_readable_timestamp(&ts, timestamp, sizeof(timestamp));
 
             // Imprime/grava as informações da syscall
-            print_syscall_info(syscall_num, regs, timestamp, wpid);
+            print_syscall_info(syscall_num, &regs, timestamp, wpid);
         }
 
         // Continua a execução do processo
@@ -298,13 +288,14 @@ void monitor_process(int pid) {
 
     // Desanexa do processo antes de terminar
     ptrace(PTRACE_DETACH, pid, NULL, NULL);
+    printf("Processo %d desanexado", pid);
 }
 
 /*
 Função principal que inicia o monitoramento de um processo e seus filhos
 parent_pid: PID do processo principal a ser monitorado
 */
-void iniciar_monitoramento(int parent_pid) {
+void start_monitoring(int parent_pid, int monitorar_filhos) {
     // Configura tratadores para SIGINT (Ctrl+C) e SIGTERM
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
@@ -333,9 +324,13 @@ void iniciar_monitoramento(int parent_pid) {
     // Imprime cabeçalho no terminal também
     printf("syscall,arg1,arg2,arg3,arg4,arg5,arg6,retorno,timestamp,pid\n");
 
-    // Adiciona o processo principal e busca todos os filhos/threads
+    // Adiciona o processo principal
     add_pid(parent_pid);
-    find_all_children(parent_pid);
+    
+    // Se a flag -f estiver ativada, busca todos os filhos/threads
+    if (monitorar_filhos) {
+        find_all_children(parent_pid);
+    }
 
     // Para cada PID monitorado, cria um processo filho para monitorá-lo
     for (int i = 0; i < num_monitored; i++) {
