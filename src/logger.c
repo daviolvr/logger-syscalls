@@ -57,20 +57,26 @@ pid: PID do processo que fez a syscall
 */
 void print_syscall_info(long syscall_num, const struct user_regs_struct *regs,
                        const char* timestamp, int pid) {
-    printf("%s,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%s,%d\n",
-           syscall_name(syscall_num),
+    // Converte o retorno para signed (para tratar erros como valores negativos)
+    long long retorno = (long long)regs->rax;
+    const char *nome_syscall = syscall_name(syscall_num);
+
+    // Saída para o terminal 
+    printf("%s (%llu,%llu,%llu,%llu,%llu,%llu) = %lld [%s] [%d]\n",
+           nome_syscall,
            regs->rdi, regs->rsi, regs->rdx,
            regs->r10, regs->r8, regs->r9,
-           (unsigned long long)regs->rax,
+           retorno,
            timestamp,
            pid);
 
+    // Saída para o CSV 
     if (csv_file) {
-        fprintf(csv_file, "%s,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%s,%d\n",
-               syscall_name(syscall_num),
+        fprintf(csv_file, "%s,%llu,%llu,%llu,%llu,%llu,%llu,%lld,%s,%d\n",
+               nome_syscall,
                regs->rdi, regs->rsi, regs->rdx,
                regs->r10, regs->r8, regs->r9,
-               (unsigned long long)regs->rax,
+               retorno, 
                timestamp,
                pid);
         fflush(csv_file);
