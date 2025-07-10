@@ -1,113 +1,170 @@
-#define _POSIX_C_SOURCE 199309L 
+#define _POSIX_C_SOURCE 199309L
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/ptrace.h>
 #include <sys/wait.h>
 #include <sys/user.h>
-#include <errno.h>
+#include <errno.h> 
 #include <time.h>
 #include <string.h>
+#include <unistd.h>
 #include "logger.h"
 #include "processo.h"
 #include "util.h"
 #include "syscall.h"
+#include <asm-generic/unistd.h>
+#include <asm/unistd_64.h>
 
-// Inicia monitoramento de syscalls do processo com PID
 void iniciar_monitoramento(int pid) {
-    if (ptrace(PTRACE_ATTACH, pid, NULL, NULL) == -1) { // Anexa o tracer ao processo alvo, se falhar exibe erro e retorna
+    if (ptrace(PTRACE_ATTACH, pid, NULL, NULL) == -1) {
         perror("Erro ao atacar com ptrace");
         return;
     }
 
-    // Obtém o nome do processo monitorado lendo /proc/[pid]/comm
     char nome_processo[256];
     get_process_name(pid, nome_processo, sizeof(nome_processo));
 
-    // Define o arquivo CSV de saída
     const char *nome_arquivo = "outputs/syscalls.csv";
-    int precisa_cabecalho = !file_exist(nome_arquivo); // Verifica se existe pra saber se precisa add cabeçalho
-
-    // Abre o arquivo CSV para dar append
-    FILE *csv = fopen(nome_arquivo, "a");
+    
+    // Abre o arquivo em modo "w" para recriá-lo do zero
+    FILE *csv = fopen(nome_arquivo, "w");
     if (!csv) {
         perror("Erro ao abrir o arquivo CSV");
         return;
     } else {
-        printf("Arquivo criado: %s\n", nome_arquivo);
+        printf("Arquivo CSV reiniciado: %s\n", nome_arquivo);
     }
 
-    // Se o arquivo não existia antes, escreve o cabeçalho CSV
-    if (precisa_cabecalho) {
-        fprintf(csv, "Nome da chamada,rdi,rsi,rdx,r10,r8,r9,retorno,timestamp,PID\n");
-        fflush(csv);
-    }
+    printf("Monitorando o processo: %s (PID: %d)\n", nome_processo, pid);
 
-    // Imprime no terminal o processo que será monitorado
-    printf("Atacando o processo: %s (PID: %d)\n", nome_processo, pid);
-
-
-    /* Espera o processo alvo parar (após o attach).
-    Depois, pede para o processo prar sempre que uma syscall for chamada ou finalizada */
     int status;
     waitpid(pid, &status, 0);
     ptrace(PTRACE_SYSCALL, pid, NULL, NULL);
 
+    int in_syscall = 0;
+    struct user_regs_struct regs;
+    long syscall_num = 0;
 
-    /*
-    Espera o processo continuar e parar novamente no próximo evento de syscall.
-    Se o processo finalizou, sai do loop
-    */
     while (1) {
         waitpid(pid, &status, 0);
         if (WIFEXITED(status)) break;
 
-        // Lê os registradores do processo monitorado (que contém os argumentos da syscall)
-        struct user_regs_struct regs;
         ptrace(PTRACE_GETREGS, pid, NULL, &regs);
 
-        // Obtém o número da syscall chamada (em orig_rax)
-        long syscall = regs.orig_rax;
-        ptrace(PTRACE_SYSCALL, pid, NULL, NULL);
+        if (!in_syscall) {
+            syscall_num = regs.orig_rax;
+            in_syscall = 1;
+        } else {
+            struct timespec ts;
+            clock_gettime(CLOCK_REALTIME, &ts);
+            char timestamp_formatado[64];
+            formatar_timestamp_legivel(ts, timestamp_formatado, sizeof(timestamp_formatado));
 
-        waitpid(pid, &status, 0);         // Espera a syscall terminar
-        if (WIFEXITED(status)) break;
+            const char *nome = syscall_name(syscall_num);
+            if (!nome) {
+                in_syscall = 0;
+                ptrace(PTRACE_SYSCALL, pid, NULL, NULL);
+                continue;
+            }
 
-        ptrace(PTRACE_GETREGS, pid, NULL, &regs); // Lê novamente os registradores, agora para pegar o valor de retorno da syscall em rax
+            // Buffer para formatar a mensagem uma só vez
+            char log_line[1024];
+            int len = 0;
 
-        struct timespec ts;
-        clock_gettime(CLOCK_REALTIME, &ts); // Obtém o timestamp atual com precisão de nanosegundos
+            switch (syscall_num) {
+                case __NR_read: {
+                    char *buf = NULL;
+                    if (regs.rax > 0 && regs.rax <= 1024) {
+                        buf = read_process_memory(pid, regs.rsi, regs.rax);
+                    }
+                    len = snprintf(log_line, sizeof(log_line),
+                        "%s(fd=%llu, buf=%p%s%s, count=%llu) = %lld [%s] [PID: %d]\n",
+                        nome, regs.rdi, (void*)regs.rsi,
+                        buf ? ", content=\"" : "",
+                        buf ? buf : "",
+                        regs.rdx, regs.rax, timestamp_formatado, pid);
+                    free(buf);
+                    break;
+                }
 
-        char timestamp_formatado[64];
-        formatar_timestamp_legivel(ts, timestamp_formatado, sizeof(timestamp_formatado)); // Formata timestamp para string legível
+                case __NR_writev: {
+                    len = snprintf(log_line, sizeof(log_line),
+                        "%s(fd=%llu, iov=%p, iovcnt=%llu) = %lld [%s] [PID: %d]\n",
+                        nome, regs.rdi, (void*)regs.rsi, regs.rdx,
+                        regs.rax, timestamp_formatado, pid);
+                    break;
+                }
 
+                case __NR_poll: {
+                    len = snprintf(log_line, sizeof(log_line),
+                        "%s(fds=%p, nfds=%llu, timeout=%lld) = %lld [%s] [PID: %d]\n",
+                        nome, (void*)regs.rdi, regs.rsi, (long long)regs.rdx,
+                        regs.rax, timestamp_formatado, pid);
+                    break;
+                }
 
-        // Imprime no terminal os dados da syscall (nome, argumentos, valor de retorno, timestamp e PID)
-        printf("%s,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%s,%d\n",
-            syscall_name(syscall),
-            regs.rdi, regs.rsi, regs.rdx,
-            regs.r10, regs.r8, regs.r9,
-            regs.rax,
-            timestamp_formatado,
-            pid
-        );
+                case __NR_statx: {
+                    len = snprintf(log_line, sizeof(log_line),
+                        "%s(dirfd=%lld, pathname=%p, flags=%llu, mask=%llu, statxbuf=%p) = %lld [%s] [PID: %d]\n",
+                        nome, (long long)regs.rdi, (void*)regs.rsi,
+                        regs.rdx, regs.r10, (void*)regs.r8,
+                        regs.rax, timestamp_formatado, pid);
+                    break;
+                }
 
-        // Grava os mesmos dados impressos no terminal no arquivo CSV
-        fprintf(csv, "%s,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%s,%d\n",
-            syscall_name(syscall),
-            regs.rdi, regs.rsi, regs.rdx,
-            regs.r10, regs.r8, regs.r9,
-            regs.rax,
-            timestamp_formatado,
-            pid
-        );
-        fflush(csv); // Garante que o buffer seja escrito no disco
+                case __NR_close: {
+                    len = snprintf(log_line, sizeof(log_line),
+                        "%s(fd=%llu) = %lld [%s] [PID: %d]\n",
+                        nome, regs.rdi, regs.rax, timestamp_formatado, pid);
+                    break;
+                }
 
-        // Continua o monitoramento para a pŕoxima syscall
+                case __NR_futex: {
+                    len = snprintf(log_line, sizeof(log_line),
+                        "%s(uaddr=%p, op=%llu, val=%llu) = %lld [%s] [PID: %d]\n",
+                        nome, (void*)regs.rdi, regs.rsi, regs.rdx,
+                        regs.rax, timestamp_formatado, pid);
+                    break;
+                }
+
+                case __NR_openat: {
+                    char *path = read_process_memory(pid, regs.rsi, 256);
+                    len = snprintf(log_line, sizeof(log_line),
+                        "%s(dirfd=%lld, pathname=\"%s\", flags=%llu, mode=%llu) = %lld [%s] [PID: %d]\n",
+                        nome, (long long)regs.rdi, path ? path : "NULL",
+                        regs.rdx, regs.r10, regs.rax, timestamp_formatado, pid);
+                    free(path);
+                    break;
+                }
+
+                case __NR_recvmsg: {
+                    len = snprintf(log_line, sizeof(log_line),
+                        "%s(sockfd=%llu, msg=%p, flags=%llu) = %lld [%s] [PID: %d]\n",
+                        nome, regs.rdi, (void*)regs.rsi, regs.rdx,
+                        regs.rax, timestamp_formatado, pid);
+                    break;
+                }
+
+                default:
+                    // Ignorar outras syscalls
+                    in_syscall = 0;
+                    ptrace(PTRACE_SYSCALL, pid, NULL, NULL);
+                    continue;
+            }
+
+            // Escreve no console e no CSV
+            printf("%s", log_line);
+            fprintf(csv, "%s", log_line);
+            fflush(csv);
+
+            in_syscall = 0;
+        }
+
         ptrace(PTRACE_SYSCALL, pid, NULL, NULL);
     }
 
-    // Ao fim do processo, desanexa o tracer e imprime a mensagem
+    fclose(csv);
     ptrace(PTRACE_DETACH, pid, NULL, NULL);
-    printf("Saindo de %d\n", pid);
+    printf("Monitoramento do PID %d finalizado\n", pid);
 }
