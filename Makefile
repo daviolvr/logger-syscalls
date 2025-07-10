@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c99 -g -Iinclude
+CFLAGS = -Wall -Wextra -std=c99 -D_POSIX_C_SOURCE=199309L -Iinclude
 LIBS = -lseccomp
 
 SRC_DIR = src

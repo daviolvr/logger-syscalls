@@ -5,9 +5,12 @@
 #include <sys/types.h>     
 #include <time.h>          
 #include <stddef.h>       
+#include <time.h> 
+#include <stddef.h>
 
-void formatar_timestamp_legivel(struct timespec ts, char *buffer, size_t size);
+void format_readable_timestamp(const struct timespec *ts, char *buffer, size_t size);
 int file_exist(const char *nome);
 char* read_process_memory(pid_t pid, unsigned long address, size_t size);
+void show_help(void);
 
 #endif
