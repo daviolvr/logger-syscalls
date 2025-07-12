@@ -63,6 +63,7 @@ char *read_process_memory(pid_t pid, unsigned long address, size_t size) {
     return buffer;
 }
 
+// Função para exibir ajuda
 void show_help(void) {
     printf("\nUso: sudo ./build/syscall_monitor <PID> [OPÇÕES]\n\n");
     printf("Argumentos:\n");

@@ -9,14 +9,17 @@
 #include <stddef.h>
 #include "translator.h"
 
-void traduzir_flags_open(int flags, char *buf, size_t size) {
+// Traduz flags de abertura de arquivo (open) para uma string legível
+void translate_flags_open(int flags, char *buf, size_t size) {
     buf[0] = '\0';
 
+    // Caso especial para nenhuma flag (apenas leitura)
     if (flags == 0) {
         strncat(buf, "O_RDONLY", size - 1);
         return;
     }
 
+    // Verifica cada flag possível e concatena ao buffer
     if (flags & O_WRONLY)      strncat(buf, "O_WRONLY|",      size - strlen(buf) - 1);
     if (flags & O_RDWR)        strncat(buf, "O_RDWR|",        size - strlen(buf) - 1);
     if (flags & O_CREAT)       strncat(buf, "O_CREAT|",       size - strlen(buf) - 1);
@@ -35,18 +38,23 @@ void traduzir_flags_open(int flags, char *buf, size_t size) {
     if (flags & O_NOFOLLOW)    strncat(buf, "O_NOFOLLOW|",    size - strlen(buf) - 1);
 #endif
 
+    // Remove o último caractere '|' se existir
     size_t len = strlen(buf);
     if (len > 0 && buf[len - 1] == '|') buf[len - 1] = '\0';
 }
 
-void traduzir_flags_statx(int flags, char *buf, size_t size) {
+
+// Traduz flags da chamada statx para uma string legível
+void translate_flags_statx(int flags, char *buf, size_t size) {
     buf[0] = '\0';
 
+    // Caso sem flags
     if (flags == 0) {
         strncat(buf, "0", size - 1);
         return;
     }
 
+    // Flags condicionais do statx
 #ifdef AT_EMPTY_PATH
     if (flags & AT_EMPTY_PATH)         strncat(buf, "AT_EMPTY_PATH|",        size - strlen(buf) - 1);
 #endif
@@ -63,18 +71,23 @@ void traduzir_flags_statx(int flags, char *buf, size_t size) {
     if (flags & AT_STATX_FORCE_SYNC)   strncat(buf, "AT_STATX_FORCE_SYNC|",  size - strlen(buf) - 1);
 #endif
 
+    // Remove o último '|'
     size_t len = strlen(buf);
     if (len > 0 && buf[len - 1] == '|') buf[len - 1] = '\0';
 }
 
-void traduzir_mask_statx(unsigned int mask, char *buf, size_t size) {
+
+// Traduz a máscara de campos solicitados do statx
+void translate_mask_statx(unsigned int mask, char *buf, size_t size) {
     buf[0] = '\0';
 
+    // Caso sem máscara
     if (mask == 0) {
         strncat(buf, "0", size - 1);
         return;
     }
 
+    // Verifica cada bit da máscara possível
     if (mask & STATX_TYPE)         strncat(buf, "STATX_TYPE|",     size - strlen(buf) - 1);
     if (mask & STATX_MODE)         strncat(buf, "STATX_MODE|",     size - strlen(buf) - 1);
     if (mask & STATX_NLINK)        strncat(buf, "STATX_NLINK|",    size - strlen(buf) - 1);
@@ -90,14 +103,19 @@ void traduzir_mask_statx(unsigned int mask, char *buf, size_t size) {
     if (mask & STATX_BTIME)        strncat(buf, "STATX_BTIME|",    size - strlen(buf) - 1);
     if (mask & STATX_ALL)          strncat(buf, "STATX_ALL|",      size - strlen(buf) - 1);
 
+    // Remove o último '|'
     size_t len = strlen(buf);
     if (len > 0 && buf[len - 1] == '|') buf[len - 1] = '\0';
 }
 
-const char *traduzir_dirfd(long dirfd) {
+
+// Traduz um descritor de diretório para string
+const char *translate_dirfd(long dirfd) {
 #ifdef AT_FDCWD
+    // Caso especial para o descritor "current working directory"
     if ((int)dirfd == AT_FDCWD) return "AT_FDCWD";
 #endif
+    // Para outros casos, retorna o número como string
     static char buf[32];
     snprintf(buf, sizeof(buf), "%ld", dirfd);
     return buf;
