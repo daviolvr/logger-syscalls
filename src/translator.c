@@ -8,6 +8,8 @@
 #include <unistd.h>     // AT_FDCWD
 #include <stddef.h>
 #include "translator.h"
+#include <sys/socket.h> // Para os macros NSG_*
+#include <sys/ptrace.h>
 
 // Traduz flags de abertura de arquivo (open) para uma string legível
 void translate_flags_open(int flags, char *buf, size_t size) {
@@ -119,4 +121,50 @@ const char *translate_dirfd(long dirfd) {
     static char buf[32];
     snprintf(buf, sizeof(buf), "%ld", dirfd);
     return buf;
+}
+
+// Traduz flags do recvmsg para string legível
+void translate_recvmsg_flags(int flags, char *buf, size_t size) {
+    buf[0] = '\0';
+    
+    if (flags == 0) {
+        strncat(buf, "0", size - 1);
+        return;
+    }
+
+    if (flags & MSG_OOB) strncat(buf, "MSG_OOB|", size - strlen(buf) - 1);
+    if (flags & MSG_PEEK) strncat(buf, "MSG_PEEK|", size - strlen(buf) - 1);
+    if (flags & MSG_DONTROUTE) strncat(buf, "MSG_DONTROUTE|", size - strlen(buf) - 1);
+    if (flags & MSG_CTRUNC) strncat(buf, "MSG_CTRUNC|", size - strlen(buf) - 1);
+    if (flags & MSG_TRUNC) strncat(buf, "MSG_TRUNC|", size - strlen(buf) - 1);
+    if (flags & MSG_WAITALL) strncat(buf, "MSG_WAITALL|", size - strlen(buf) - 1);
+    
+    // Remove o último '|' se existir
+    size_t len = strlen(buf);
+    if (len > 0 && buf[len - 1] == '|') buf[len - 1] = '\0';
+}
+
+// Traduz a estrutura msghdr para string legível
+void translate_msghdr(pid_t pid, unsigned long addr, char *buf, size_t size) {
+    buf[0] = '\0';
+    
+    if (addr == 0) {
+        strncat(buf, "NULL", size - 1);
+        return;
+    }
+
+    struct msghdr msg;
+    if (ptrace(PTRACE_PEEKDATA, pid, addr, &msg) == -1) {
+        strncat(buf, "(erro ao ler msghdr)", size - 1);
+        return;
+    }
+
+    char flags_buf[128];
+    translate_recvmsg_flags(msg.msg_flags, flags_buf, sizeof(flags_buf));
+    
+    snprintf(buf, size,
+            "{msg_name=%p, msg_namelen=%u, msg_iov=%p, msg_iovlen=%lu, "
+            "msg_control=%p, msg_controllen=%lu, msg_flags=%s}",
+            msg.msg_name, msg.msg_namelen, msg.msg_iov, msg.msg_iovlen,
+            msg.msg_control, msg.msg_controllen, flags_buf);
 }

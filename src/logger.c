@@ -103,15 +103,24 @@ void format_syscall_details(long syscall_num, const struct user_regs_struct *reg
         case __NR_statx: {
             char flags_buf[128];
             char mask_buf[128];
+            char *path = NULL;
             
             translate_flags_statx(regs->rdx, flags_buf, sizeof(flags_buf));
             translate_mask_statx(regs->r10, mask_buf, sizeof(mask_buf));
             
+            // Se não for AT_EMPTY_PATH, tenta ler o pathname
+            if (!(regs->rdx & AT_EMPTY_PATH)) {
+                path = read_process_memory(pid, regs->rsi, 256);
+            }
+            
             // Formata os detalhes da syscall statx
             snprintf(buffer, size,
-                    "dirfd=%s, pathname=%p, flags=%s, mask=%s, statxbuf=%p",
-                    translate_dirfd(regs->rdi), (void*)regs->rsi,
+                    "dirfd=%s, pathname=%s, flags=%s, mask=%s, statxbuf=%p",
+                    translate_dirfd(regs->rdi),
+                    path ? path : (regs->rdx & AT_EMPTY_PATH) ? "(AT_EMPTY_PATH)" : "(NULL)",
                     flags_buf, mask_buf, (void*)regs->r8);
+            
+            if (path) free(path);
             break;
         }
 
@@ -145,10 +154,41 @@ void format_syscall_details(long syscall_num, const struct user_regs_struct *reg
         }
 
         case __NR_recvmsg: {
-            // Formata os detalhes da syscall recvmsg
+            char flags_buf[128];
+            char msghdr_buf[512];
+            
+            translate_recvmsg_flags(regs->rdx, flags_buf, sizeof(flags_buf));
+            translate_msghdr(pid, regs->rsi, msghdr_buf, sizeof(msghdr_buf));
+            
             snprintf(buffer, size,
-                    "sockfd=%llu, msg=%p, flags=%llu",
-                    regs->rdi, (void*)regs->rsi, regs->rdx);
+                    "sockfd=%llu, msg=%s, flags=%s",
+                    regs->rdi, msghdr_buf, flags_buf);
+            break;
+        }
+
+        case __NR_newfstatat: {
+            char *path = NULL;
+            char flags_buf[128] = "0";
+            
+            // Traduz dirfd
+            const char *dirfd_str = translate_dirfd(regs->rdi);
+            
+            // Tenta ler o pathname se o ponteiro não for NULL
+            if (regs->rsi != 0) {
+                path = read_process_memory(pid, regs->rsi, 256);
+            }
+            
+            // Traduz flags (usando as mesmas flags do statx)
+            translate_flags_statx(regs->r10, flags_buf, sizeof(flags_buf));
+            
+            snprintf(buffer, size,
+                    "dirfd=%s, pathname=%s, buf=%p, flags=%s",
+                    dirfd_str,
+                    path ? path : regs->rsi == 0 ? "NULL" : "(erro)",
+                    (void*)regs->rdx,
+                    flags_buf);
+            
+            if (path) free(path);
             break;
         }
 
@@ -211,6 +251,10 @@ void print_syscall_info(long syscall_num, const struct user_regs_struct *regs,
                 break;
             case __NR_recvmsg:
                 sscanf(details, "sockfd=%127[^,], msg=%127[^,], flags=%127s", arg1, arg2, arg3);
+                break;
+            case __NR_newfstatat:
+                sscanf(details, "dirfd=%127[^,], pathname=%127[^,], buf=%127[^,], flags=%127s",
+                    arg1, arg2, arg3, arg4);
                 break;
             default:
                 // Para syscalls genéricas, apenas os argumentos padrão
