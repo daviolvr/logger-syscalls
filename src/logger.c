@@ -80,7 +80,7 @@ void format_syscall_details(long syscall_num, const struct user_regs_struct *reg
 
         case __NR_writev:
         case __NR_readv: {
-            char iov_buf[2048];
+            char iov_buf[4096];
             translate_iovec(pid, regs->rsi, regs->rdx, iov_buf, sizeof(iov_buf));
             
             snprintf(buffer, size, "fd=%llu, iov=%s, iovcnt=%llu",
@@ -156,14 +156,10 @@ void format_syscall_details(long syscall_num, const struct user_regs_struct *reg
 
         case __NR_recvmsg: {
             char flags_buf[128];
-            char msghdr_buf[512];
+            char msghdr_buf[2048]; 
             
             translate_recvmsg_flags(regs->rdx, flags_buf, sizeof(flags_buf));
             translate_msghdr(pid, regs->rsi, msghdr_buf, sizeof(msghdr_buf));
-            
-            for (char *p = msghdr_buf; *p; p++) {
-                if (*p == ',') *p = '|';
-            }
             
             snprintf(buffer, size,
                     "sockfd=%llu, msg=%s, flags=%s",

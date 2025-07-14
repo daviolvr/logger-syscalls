@@ -16,6 +16,11 @@
 #include <stdlib.h>
 #include "util.h"
 
+// Função auxiliar para formatar tamanhos em bytes (como o strace)
+static void format_size(unsigned long size, char *buf, size_t buf_size) {
+    snprintf(buf, buf_size, "%lu", size);
+}
+
 // Traduz flags de abertura de arquivo (open) para uma string legível
 void translate_flags_open(int flags, char *buf, size_t size) {
     buf[0] = '\0';
@@ -158,20 +163,38 @@ void translate_msghdr(pid_t pid, unsigned long addr, char *buf, size_t size) {
         return;
     }
 
-    struct msghdr msg;
-    if (ptrace(PTRACE_PEEKDATA, pid, addr, &msg) == -1) {
+    // Usa read_process_memory para ler a estrutura msghdr
+    char *data = read_process_memory(pid, addr, sizeof(struct msghdr));
+    if (!data) {
         strncat(buf, "(erro ao ler msghdr)", size - 1);
         return;
     }
+    
+    struct msghdr msg;
+    memcpy(&msg, data, sizeof(struct msghdr));
+    free(data);
 
+    // Resto da função permanece igual...
     char flags_buf[128];
     translate_recvmsg_flags(msg.msg_flags, flags_buf, sizeof(flags_buf));
     
+    char namelen_buf[32], controllen_buf[32], iovlen_buf[32];
+    format_size(msg.msg_namelen, namelen_buf, sizeof(namelen_buf));
+    format_size(msg.msg_controllen, controllen_buf, sizeof(controllen_buf));
+    format_size(msg.msg_iovlen, iovlen_buf, sizeof(iovlen_buf));
+    
+    // Traduz msg_iov
+    char iov_buf[1024];
+    translate_iovec(pid, (unsigned long)msg.msg_iov, msg.msg_iovlen, iov_buf, sizeof(iov_buf));
+    
     snprintf(buf, size,
-            "{msg_name=%p, msg_namelen=%u, msg_iov=%p, msg_iovlen=%lu, "
-            "msg_control=%p, msg_controllen=%lu, msg_flags=%s}",
-            msg.msg_name, msg.msg_namelen, msg.msg_iov, msg.msg_iovlen,
-            msg.msg_control, msg.msg_controllen, flags_buf);
+            "{msg_name=%p, msg_namelen=%s, msg_iov=%s, msg_iovlen=%s%s%s%s%s, msg_flags=%s}",
+            msg.msg_name, namelen_buf, iov_buf, iovlen_buf,
+            msg.msg_control ? ", msg_control=" : "",
+            msg.msg_control ? (msg.msg_controllen > 0 ? "" : "0") : "",
+            msg.msg_control ? (msg.msg_controllen > 0 ? controllen_buf : "") : "",
+            msg.msg_flags ? ", " : "",
+            flags_buf);
 }
 
 // Traduz a operação futex para string legível
@@ -288,26 +311,34 @@ void translate_iovec(pid_t pid, unsigned long addr, int iovcnt, char *buf, size_
         return;
     }
 
-    // Limita o número de estruturas a serem lidas para evitar buffer overflow
     if (iovcnt > 16) iovcnt = 16;
+    
+    strncat(buf, "[", size - strlen(buf) - 1);
     
     for (int i = 0; i < iovcnt; i++) {
         struct iovec iov;
         unsigned long current_addr = addr + i * sizeof(struct iovec);
         
-        if (ptrace(PTRACE_PEEKDATA, pid, current_addr, &iov) == -1) {
+        // Usa read_process_memory para ler a estrutura iovec
+        char *data = read_process_memory(pid, current_addr, sizeof(struct iovec));
+        if (!data) {
             strncat(buf, "(erro ao ler iovec)", size - strlen(buf) - 1);
             return;
         }
+        memcpy(&iov, data, sizeof(struct iovec));
+        free(data);
 
+        char size_buf[32];
+        format_size(iov.iov_len, size_buf, sizeof(size_buf));
+        
         char *content = NULL;
         if (iov.iov_len > 0 && iov.iov_len <= 1024) {
             content = read_process_memory(pid, (unsigned long)iov.iov_base, iov.iov_len);
         }
         
         char entry[512];
-        snprintf(entry, sizeof(entry), "{iov_base=%p, iov_len=%lu%s%s}", 
-                iov.iov_base, iov.iov_len,
+        snprintf(entry, sizeof(entry), "{iov_base=%p, iov_len=%s%s%s}", 
+                (void*)iov.iov_base, size_buf,
                 content ? ", content=\"" : "",
                 content ? content : "");
                 
@@ -316,4 +347,6 @@ void translate_iovec(pid_t pid, unsigned long addr, int iovcnt, char *buf, size_
         if (content) free(content);
         if (i < iovcnt - 1) strncat(buf, ", ", size - strlen(buf) - 1);
     }
+    
+    strncat(buf, "]", size - strlen(buf) - 1);
 }
