@@ -27,4 +27,8 @@ Ainda na raiz do projeto, rode:
 sudo ./build/syscall_monitor <PID>
 ```
 
-OBS: o PID é o que você escolheu no passo 2.
+⚠️ OBS: Você pode rodar:
+```sh
+sudo ./build/syscall_monitor -h
+```
+para obter ajuda.
