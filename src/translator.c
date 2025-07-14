@@ -257,14 +257,20 @@ void translate_pollfd(pid_t pid, unsigned long addr, nfds_t nfds, char *buf, siz
     // Limita o número de estruturas a serem lidas para evitar buffer overflow
     if (nfds > 16) nfds = 16;
     
+    strncat(buf, "[", size - strlen(buf) - 1);
+    
     for (nfds_t i = 0; i < nfds; i++) {
         struct pollfd pfd;
         unsigned long current_addr = addr + i * sizeof(struct pollfd);
         
-        if (ptrace(PTRACE_PEEKDATA, pid, current_addr, &pfd) == -1) {
+        // Usa read_process_memory para ler a estrutura pollfd corretamente
+        char *data = read_process_memory(pid, current_addr, sizeof(struct pollfd));
+        if (!data) {
             strncat(buf, "(erro ao ler pollfd)", size - strlen(buf) - 1);
             return;
         }
+        memcpy(&pfd, data, sizeof(struct pollfd));
+        free(data);
 
         char events_buf[64];
         char revents_buf[64];
@@ -299,6 +305,8 @@ void translate_pollfd(pid_t pid, unsigned long addr, nfds_t nfds, char *buf, siz
         
         if (i < nfds - 1) strncat(buf, ", ", size - strlen(buf) - 1);
     }
+    
+    strncat(buf, "]", size - strlen(buf) - 1);
 }
 
 // Traduz a estrutura iovec para string legível
