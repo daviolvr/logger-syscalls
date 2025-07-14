@@ -16,7 +16,7 @@
 #include <stdlib.h>
 #include "util.h"
 
-// Função auxiliar para formatar tamanhos em bytes (como o strace)
+// Função auxiliar para formatar tamanhos em bytes
 static void format_size(unsigned long size, char *buf, size_t buf_size) {
     snprintf(buf, buf_size, "%lu", size);
 }
@@ -174,7 +174,6 @@ void translate_msghdr(pid_t pid, unsigned long addr, char *buf, size_t size) {
     memcpy(&msg, data, sizeof(struct msghdr));
     free(data);
 
-    // Resto da função permanece igual...
     char flags_buf[128];
     translate_recvmsg_flags(msg.msg_flags, flags_buf, sizeof(flags_buf));
     
