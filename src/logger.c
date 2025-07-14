@@ -202,6 +202,23 @@ void format_syscall_details(long syscall_num, const struct user_regs_struct *reg
             break;
         }
 
+        case __NR_write: {
+            char *content = NULL;
+            if (regs->rdx > 0 && regs->rdx <= 1024) {  
+                content = read_process_memory(pid, regs->rsi, regs->rdx);  
+            }
+            
+            snprintf(buffer, size,
+                    "fd=%llu, buf=%p%s%s, count=%llu",
+                    regs->rdi,  
+                    (void*)regs->rsi,
+                    content ? ", content=\"" : "",
+                    content ? content : "",
+                    regs->rdx);
+            free(content);
+            break;
+        }
+
         default:
             snprintf(buffer, size,
                     "arg1=%llu, arg2=%llu, arg3=%llu, arg4=%llu, arg5=%llu, arg6=%llu",
@@ -323,6 +340,17 @@ void print_syscall_info(long syscall_num, const struct user_regs_struct *regs,
             case __NR_access:
                 sscanf(details, "pathname=%255[^,], mode=%255s", arg1, arg2);
                 break;
+            case __NR_write: {
+                // Extrai fd e buf normalmente
+                sscanf(details, "fd=%255[^,], buf=%255[^,]", arg1, arg2);
+                
+                // Pula o content, procurando pelo count (assim como o strace faz)
+                char *count_start = strstr(details, "count=");
+                if (count_start) {
+                    sscanf(count_start, "count=%255s", arg3);
+                }
+                break;
+            }
             default:
                 snprintf(arg1, sizeof(arg1), "%llu", regs->rdi);
                 snprintf(arg2, sizeof(arg2), "%llu", regs->rsi);
