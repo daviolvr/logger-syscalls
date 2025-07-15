@@ -238,12 +238,12 @@ void print_syscall_info(long syscall_num, const struct user_regs_struct *regs,
     format_syscall_details(syscall_num, regs, pid, details, sizeof(details));
 
     // Saída para o terminal 
-    printf("%s(%s) = %lld [%s] [PID %d]\n",
+    printf("[PID %d] %s(%s) = %lld [%s]\n",
+           pid, 
            nome_syscall,
            details,
            retorno,
-           timestamp,
-           pid);
+           timestamp);
 
     // Saída para o CSV
     if (csv_file) {
