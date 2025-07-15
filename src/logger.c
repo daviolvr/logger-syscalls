@@ -59,17 +59,21 @@ Formata os detalhes de uma syscall com informações específicas para certas ch
 */
 void format_syscall_details(long syscall_num, const struct user_regs_struct *regs, 
                           int pid, char *buffer, size_t size) {
-    buffer[0] = '\0'; // Inicializa o buffer como string vazia
+    // Inicializa o buffer vazio
+    buffer[0] = '\0';
     
+    // Verifica o tipo de syscall
     switch (syscall_num) {
+        // Trata syscall read()
         case __NR_read: {
             char *content = NULL;
+            // Se tiver conteúdo válido (no caso, 1-1024 bytes), lê da memória
             if (regs->rax > 0 && regs->rax <= 1024) {
                 content = read_process_memory(pid, regs->rsi, regs->rax);
             }
             
-            snprintf(buffer, size,
-                    "fd=%llu, buf=%p%s%s, count=%llu",
+            // Formata os detalhes: fd, buffer, conteúdo e tamanho
+            snprintf(buffer, size, "fd=%llu, buf=%p%s%s, count=%llu",
                     regs->rdi, (void*)regs->rsi,
                     content ? ", content=\"" : "",
                     content ? content : "",
@@ -78,20 +82,26 @@ void format_syscall_details(long syscall_num, const struct user_regs_struct *reg
             break;
         }
 
+        // Trata syscalls writev() e readv()
         case __NR_writev:
         case __NR_readv: {
             char iov_buf[4096];
+            // Traduz a estrutura iovec para string
             translate_iovec(pid, regs->rsi, regs->rdx, iov_buf, sizeof(iov_buf));
             
+            // Formata: fd, iov e contagem
             snprintf(buffer, size, "fd=%llu, iov=%s, iovcnt=%llu",
                     regs->rdi, iov_buf, regs->rdx);
             break;
         }
 
+        // Trata syscall poll()
         case __NR_poll: {
             char fds_buf[1024];
+            // Traduz estrutura pollfd
             translate_pollfd(pid, regs->rdi, regs->rsi, fds_buf, sizeof(fds_buf));
             
+            // Formata timeout (-1 = INFTIM)
             char timeout_str[32];
             if (regs->rdx == (unsigned long long)-1) {
                 strcpy(timeout_str, "INFTIM");
@@ -99,23 +109,28 @@ void format_syscall_details(long syscall_num, const struct user_regs_struct *reg
                 snprintf(timeout_str, sizeof(timeout_str), "%lld", (long long)regs->rdx);
             }
             
+            // Formata: descritores, contagem e timeout
             snprintf(buffer, size, "fds=%s, nfds=%llu, timeout=%s",
                     fds_buf, regs->rsi, timeout_str);
             break;
         }
 
+        // Trata syscall statx()
         case __NR_statx: {
             char flags_buf[128];
             char mask_buf[128];
             char *path = NULL;
             
+            // Traduz flags e máscara
             translate_flags_statx(regs->rdx, flags_buf, sizeof(flags_buf));
             translate_mask_statx(regs->r10, mask_buf, sizeof(mask_buf));
             
+            // Lê pathname se não for vazio
             if (!(regs->rdx & AT_EMPTY_PATH)) {
                 path = read_process_memory(pid, regs->rsi, 256);
             }
             
+            // Formata: dirfd, pathname, flags, mask e buffer
             snprintf(buffer, size,
                     "dirfd=%s, pathname=%s, flags=%s, mask=%s, statxbuf=%p",
                     translate_dirfd(regs->rdi),
@@ -126,26 +141,34 @@ void format_syscall_details(long syscall_num, const struct user_regs_struct *reg
             break;
         }
 
+        // Trata syscall close()
         case __NR_close: {
+            // Formata apenas o file descriptor
             snprintf(buffer, size, "fd=%llu", regs->rdi);
             break;
         }
 
+        // Trata syscall futex()
         case __NR_futex: {
             char op_buf[128];
+            // Traduz operação futex
             translate_futex_op(regs->rsi, op_buf, sizeof(op_buf));
             
+            // Formata: endereço, operação e valor
             snprintf(buffer, size, "uaddr=%p, op=%s, val=%llu",
                     (void*)regs->rdi, op_buf, regs->rdx);
             break;
         }
 
+        // Trata syscall openat()
         case __NR_openat: {
             char *path = read_process_memory(pid, regs->rsi, 256);
             char flags_buf[256];
             
+            // Traduz flags de abertura
             translate_flags_open(regs->rdx, flags_buf, sizeof(flags_buf));
             
+            // Formata: dirfd, pathname, flags e modo
             snprintf(buffer, size,
                     "dirfd=%s, pathname=\"%s\", flags=%s, mode=%llo",
                     translate_dirfd(regs->rdi), path ? path : "NULL",
@@ -154,31 +177,38 @@ void format_syscall_details(long syscall_num, const struct user_regs_struct *reg
             break;
         }
 
+        // Trata syscall recvmsg()
         case __NR_recvmsg: {
             char flags_buf[128];
             char msghdr_buf[2048]; 
             
+            // Traduz flags e estrutura msghdr
             translate_recvmsg_flags(regs->rdx, flags_buf, sizeof(flags_buf));
             translate_msghdr(pid, regs->rsi, msghdr_buf, sizeof(msghdr_buf));
             
+            // Formata: socket fd, mensagem e flags
             snprintf(buffer, size,
                     "sockfd=%llu, msg=%s, flags=%s",
                     regs->rdi, msghdr_buf, flags_buf);
             break;
         }
 
+        // Trata syscall newfstatat()
         case __NR_newfstatat: {
             char *path = NULL;
             char flags_buf[128] = "0";
             
             const char *dirfd_str = translate_dirfd(regs->rdi);
             
+            // Lê pathname se não for NULL
             if (regs->rsi != 0) {
                 path = read_process_memory(pid, regs->rsi, 256);
             }
             
+            // Traduz flags
             translate_flags_statx(regs->r10, flags_buf, sizeof(flags_buf));
             
+            // Formata: dirfd, pathname, buffer e flags
             snprintf(buffer, size,
                     "dirfd=%s, pathname=%s, buf=%p, flags=%s",
                     dirfd_str,
@@ -190,11 +220,15 @@ void format_syscall_details(long syscall_num, const struct user_regs_struct *reg
             break;
         }
 
+        // Trata syscall access()
         case __NR_access: {
+            // Lê pathname
             char *path = read_process_memory(pid, regs->rdi, 256);
             char mode_buf[32];
+            // Traduz modo de acesso
             translate_access_mode(regs->rsi, mode_buf, sizeof(mode_buf));
             
+            // Formata: pathname e modo
             snprintf(buffer, size, "pathname=\"%s\", mode=%s",
                     path ? path : "NULL", mode_buf);
             
@@ -202,12 +236,15 @@ void format_syscall_details(long syscall_num, const struct user_regs_struct *reg
             break;
         }
 
+        // Trata syscall write()
         case __NR_write: {
             char *content = NULL;
+            // Se tiver conteúdo válido (1-1024 bytes), lê da memória
             if (regs->rdx > 0 && regs->rdx <= 1024) {  
                 content = read_process_memory(pid, regs->rsi, regs->rdx);  
             }
             
+            // Formata: fd, buffer, conteúdo e tamanho
             snprintf(buffer, size,
                     "fd=%llu, buf=%p%s%s, count=%llu",
                     regs->rdi,  
@@ -219,6 +256,7 @@ void format_syscall_details(long syscall_num, const struct user_regs_struct *reg
             break;
         }
 
+        // Caso padrão para syscalls não tratadas especificamente
         default:
             snprintf(buffer, size,
                     "arg1=%llu, arg2=%llu, arg3=%llu, arg4=%llu, arg5=%llu, arg6=%llu",
@@ -255,14 +293,19 @@ void print_syscall_info(long syscall_num, const struct user_regs_struct *regs,
                 break;
             case __NR_writev:
             case __NR_readv: {
+                // Encontra a posição da string "iov=" dentro dos details
                 char *iov_start = strstr(details, "iov=");
+
+                // Encontra a posição da string ", iovcnt=" dentro dos details
                 char *iovcnt_start = strstr(details, ", iovcnt=");
+
+                // Se ambas as strings forem encontradas
                 if (iov_start && iovcnt_start) {
-                    sscanf(details, "fd=%255[^,]", arg1);
-                    size_t iov_len = iovcnt_start - (iov_start + 4);
-                    strncpy(arg2, iov_start + 4, iov_len);
+                    sscanf(details, "fd=%255[^,]", arg1); // Extrai o fd que vem antes do "iov="
+                    size_t iov_len = iovcnt_start - (iov_start + 4); // Calcula o tamanho da string que representa a estrutura iov
+                    strncpy(arg2, iov_start + 4, iov_len); // Copia a parte da string que representa a estrutura iov para arg2
                     arg2[iov_len] = '\0';
-                    strncpy(arg3, iovcnt_start + 9, sizeof(arg3) - 1);
+                    strncpy(arg3, iovcnt_start + 9, sizeof(arg3) - 1); // Copia o valor do iovcnt para arg3
                 }
                 break;
             }
