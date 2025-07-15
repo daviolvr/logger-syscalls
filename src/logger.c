@@ -253,49 +253,38 @@ void print_syscall_info(long syscall_num, const struct user_regs_struct *regs,
             case __NR_read:
                 sscanf(details, "fd=%255[^,], buf=%255[^,], count=%255s", arg1, arg2, arg3);
                 break;
-            case __NR_writev: {
-                // Extrai toda a estrutura iov como um único campo
+            case __NR_writev:
+            case __NR_readv: {
                 char *iov_start = strstr(details, "iov=");
                 char *iovcnt_start = strstr(details, ", iovcnt=");
-                
                 if (iov_start && iovcnt_start) {
-                    // Copia fd
                     sscanf(details, "fd=%255[^,]", arg1);
-                    
-                    // Copia toda a parte do iov
                     size_t iov_len = iovcnt_start - (iov_start + 4);
                     strncpy(arg2, iov_start + 4, iov_len);
                     arg2[iov_len] = '\0';
-                    
-                    // Copia iovcnt
                     strncpy(arg3, iovcnt_start + 9, sizeof(arg3) - 1);
-                    arg3[sizeof(arg3) - 1] = '\0';
                 }
                 break;
             }
-            case __NR_readv:
-                sscanf(details, "fd=%255[^,], iov=%255[^,], iovcnt=%255s", arg1, arg2, arg3);
-                break;
             case __NR_poll: {
                 // Extrai toda a string de fds como um único campo
                 char *fds_start = strstr(details, "fds=");
                 char *nfds_start = strstr(details, ", nfds=");
                 char *timeout_start = strstr(details, ", timeout=");
-                
+
                 if (fds_start && nfds_start && timeout_start) {
                     // Copia toda a parte dos fds
                     size_t fds_len = nfds_start - (fds_start + 4);
                     strncpy(arg1, fds_start + 4, fds_len);
                     arg1[fds_len] = '\0';
-                    
+
                     // Copia nfds
                     size_t nfds_len = timeout_start - (nfds_start + 7);
                     strncpy(arg2, nfds_start + 7, nfds_len);
                     arg2[nfds_len] = '\0';
-                    
+
                     // Copia timeout
                     strncpy(arg3, timeout_start + 10, sizeof(arg3) - 1);
-                    arg3[sizeof(arg3) - 1] = '\0';
                 }
                 break;
             }
@@ -317,19 +306,18 @@ void print_syscall_info(long syscall_num, const struct user_regs_struct *regs,
                 // Extrai toda a estrutura msg como um único campo
                 char *msg_start = strstr(details, "msg=");
                 char *flags_start = strstr(details, ", flags=");
-                
+
                 if (msg_start && flags_start) {
                     // Copia sockfd
                     sscanf(details, "sockfd=%255[^,]", arg1);
-                    
+
                     // Copia toda a parte da msg
                     size_t msg_len = flags_start - (msg_start + 4);
                     strncpy(arg2, msg_start + 4, msg_len);
                     arg2[msg_len] = '\0';
-                    
+
                     // Copia flags
                     strncpy(arg3, flags_start + 8, sizeof(arg3) - 1);
-                    arg3[sizeof(arg3) - 1] = '\0';
                 }
                 break;
             }
@@ -343,7 +331,7 @@ void print_syscall_info(long syscall_num, const struct user_regs_struct *regs,
             case __NR_write: {
                 // Extrai fd e buf normalmente
                 sscanf(details, "fd=%255[^,], buf=%255[^,]", arg1, arg2);
-                
+
                 // Pula o content, procurando pelo count (assim como o strace faz)
                 char *count_start = strstr(details, "count=");
                 if (count_start) {
@@ -361,20 +349,34 @@ void print_syscall_info(long syscall_num, const struct user_regs_struct *regs,
                 break;
         }
 
-        // Substitui vírgulas por ponto-e-vírgula nos argumentos para evitar conflito com o CSV
-        for (char *p = arg1; *p; p++) if (*p == ',') *p = ';';
-        for (char *p = arg2; *p; p++) if (*p == ',') *p = ';';
-        for (char *p = arg3; *p; p++) if (*p == ',') *p = ';';
-        for (char *p = arg4; *p; p++) if (*p == ',') *p = ';';
-        for (char *p = arg5; *p; p++) if (*p == ',') *p = ';';
-        for (char *p = arg6; *p; p++) if (*p == ',') *p = ';';
+        // Limpa aspas e substitui vírgulas internas por ponto-e-vírgula
+        char *args[] = {arg1, arg2, arg3, arg4, arg5, arg6};
+        for (int i = 0; i < 6; i++) {
+            // Remove aspas existentes
+            char *p = args[i];
+            while (*p) {
+                if (*p == '"') *p = '\'';
+                p++;
+            }
+            
+            // Substitui vírgulas por ponto-e-vírgula
+            p = args[i];
+            while (*p) {
+                if (*p == ',') *p = ';';
+                p++;
+            }
+        }
 
-        fprintf(csv_file, "%s,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",%lld,%s,%d\n",
-               nome_syscall,
-               arg1, arg2, arg3, arg4, arg5, arg6,
-               retorno, 
-               timestamp,
-               pid);
+        // Escreve no CSV com tratamento seguro para strings
+        fprintf(csv_file, "%s,", nome_syscall);
+        for (int i = 0; i < 6; i++) {
+            if (strchr(args[i], ';') || strchr(args[i], ' ')) {
+                fprintf(csv_file, "\"%s\",", args[i]);
+            } else {
+                fprintf(csv_file, "%s,", args[i]);
+            }
+        }
+        fprintf(csv_file, "%lld,%s,%d\n", retorno, timestamp, pid);
         fflush(csv_file);
     }
 }
