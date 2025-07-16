@@ -22,12 +22,6 @@ void format_readable_timestamp(const struct timespec *ts, char *buffer, size_t s
     strncat(buffer, nanos, size - strlen(buffer) - 1);
 }
 
-// Função pra checar se o arquivo passado existe, retornando 1 se sim, 0 se não
-int file_exist(const char *nome) {
-    struct stat buffer;
-    return (stat(nome, &buffer) == 0);
-}
-
 // Le a memoria de um processo a partir do espaço de endereçamento dele
 char *read_process_memory(pid_t pid, unsigned long address, size_t size) {
     // Verifica se o tamanho é válido (entre 1 e 4096 bytes)
