@@ -28,9 +28,14 @@ btop
 E selecione um PID para análise.
 
 ## 4. Rodar o programa
-Ainda na raiz do projeto, rode:
+Ainda na raiz do projeto, para monitoramento do processo específico passado como argumento, rode:
 ```sh
 sudo ./build/syscall_monitor <PID>
+```
+
+ou, caso queira fazer um monitoramento mais abrangente (processos filhos e threads), rode:
+```sh
+sudo ./build/syscall_monitor <PID> -f
 ```
 
 ⚠️ OBS: Você pode rodar:
