@@ -6,7 +6,13 @@ Na raiz do projeto, rode:
 make
 ```
 
-## 2. Rodando htop ou btop
+## 2. Instalando a libseccomp
+A libseccomp serve para traduzir números de syscalls em nomes legíveis
+```sh
+sudo apt install libseccomp-dev
+```
+
+## 3. Rodando htop ou btop
 Caso não tenha:
 ```sh
 sudo apt install btop
@@ -21,7 +27,7 @@ btop
 
 E selecione um PID para análise.
 
-## 3. Rodar o programa
+## 4. Rodar o programa
 Ainda na raiz do projeto, rode:
 ```sh
 sudo ./build/syscall_monitor <PID>
