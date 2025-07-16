@@ -5,6 +5,7 @@ Na raiz do projeto, rode:
 ```sh
 make
 ```
+para criar o diretório build/ já com os arquivos objeto e o executável.
 
 ## 2. Instalando a libseccomp
 A libseccomp serve para traduzir números de syscalls em nomes legíveis
